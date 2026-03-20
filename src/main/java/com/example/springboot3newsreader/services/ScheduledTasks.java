@@ -14,7 +14,7 @@ public class ScheduledTasks {
 
     // 每1小时执行一次 (cron: 秒 分 时 日 月 周)
     // 0 0 * * * ? -> 每小时的第0分0秒执行
-    @Scheduled(cron = "0 0 * * * ?")
+    @Scheduled(cron = "0 0,30 * * * ?")
     public void scheduleRefresh() {
         System.out.println("[Scheduled] Starting hourly feed refresh at " + LocalDateTime.now());
         try {
