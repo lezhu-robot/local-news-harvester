@@ -1,28 +1,28 @@
 Category,Name,Original Category,Link,Update Frequency,RSS Source,Note
-AI,量子位 (QbitAI),AI/科技,https://www.qbitai.com/,日,http://43.134.96.131:1200/qbitai/category/%E8%B5%84%E8%AE%AF,国内知名度top3的AI公众号
+AI,量子位 (QbitAI),AI/科技,https://www.qbitai.com/,日,http://43.165.175.44:1200/qbitai/category/%E8%B5%84%E8%AE%AF,国内知名度top3的AI公众号
 AI,机器之心 (Machine Heart),AI,https://www.jiqizhixin.com/,日,https://www.jiqizhixin.com/rss,
-AI,新智元 (Aiera),AI,https://aiera.com.cn/,日,http://43.134.96.131:1200/aiera,
-AI,MIT News (AI),科技,https://news.mit.edu/topic/artificial-intelligence2?utm_source=chatgpt.com,日,http://150.158.113.98:1200/mit/news/topic/artificial-intelligence2,
+AI,新智元 (Aiera),AI,https://aiera.com.cn/,日,http://43.165.175.44:1200/aiera,
+AI,MIT News (AI),科技,https://news.mit.edu/topic/artificial-intelligence2?utm_source=chatgpt.com,日,http://43.165.175.44:1200/mit/news/topic/artificial-intelligence2,
 AI,Google官方博客,AI,https://blog.google/products/search/,其他,https://blog.google/products/search/rss,
-AI,AI base,AI,https://news.aibase.com/zh/news,,http://43.134.96.131:1200/aibase/news,新闻聚合
-AI,AI hot,AI,https://aihot.today/,,http://43.134.96.131:1200/aihot/today,新闻聚合
+AI,AI base,AI,https://news.aibase.com/zh/news,,http://43.165.175.44:1200/aibase/news,新闻聚合
+AI,AI hot,AI,https://aihot.today/,,http://43.165.175.44:1200/aihot/today,新闻聚合
 AI,SE roundtable,AI 搜索,https://www.seroundtable.com/google-ai-mode-shortcut-in-search-bar-39230.html,,https://www.seroundtable.com/index-full.rdf,
-AI,Search Engine Roundtable,搜索,https://www.seroundtable.com/,日,http://43.134.96.131:1200/seroundtable,搜索新闻
-AI,TestingCatalog,AI,https://www.testingcatalog.com/,其他,http://43.134.96.131:1200/testingcatalog,AI产品动态（偏向测试中功能的偷跑）
-AI,Telegram官网新闻动态,小游戏,https://telegram.org/blog/fullscreen-miniapps-and-more,每月,http://43.134.96.131:1200/telegramorg/blog,产品功能发布
+AI,Search Engine Roundtable,搜索,https://www.seroundtable.com/,日,http://43.165.175.44:1200/seroundtable,搜索新闻
+AI,TestingCatalog,AI,https://www.testingcatalog.com/,其他,http://43.165.175.44:1200/testingcatalog,AI产品动态（偏向测试中功能的偷跑）
+AI,Telegram官网新闻动态,小游戏,https://telegram.org/blog/fullscreen-miniapps-and-more,每月,http://43.165.175.44:1200/telegramorg/blog,产品功能发布
 Game,Pocket Gamer,小游戏,https://pocketgamer.com,日,https://www.pocketgamer.com/index.rss,移动游戏资讯平台，提供游戏新闻、评测及榜单内容
 Game,GameIndustry.biz,小游戏,https://gameindustry.biz,日,https://www.gamesindustry.biz/feed,游戏产业综合媒体，覆盖全球游戏行业的商业、政策与市场动态
 Game,eurogamer,小游戏,https://www.eurogamer.net,其他,https://www.eurogamer.net/feed,综合游戏媒体，包含游戏新闻、深度报道、评测与玩家社区内容
-Game,jayisgames,小游戏,https://jayisgames.com,其他,http://43.134.96.131:1200/jayisgames,休闲与独立游戏媒体，专注休闲类游戏的评测、推荐与资讯
-AI,facebook开发者官网新闻,小游戏,https://developers.facebook.com/blog/,日,http://43.134.96.131:1200/facebookdevelopers/blog,Meta 公司级别的重大公告、产品更新
-AI,kwai官网新闻,小游戏,https://www.kwai.com/newsroom?referrer=grok.com,,http://43.134.96.131:1200/kwai/newsroom,kwai官网发布品牌活动、合作、内容趋势
-AI,youtube官网新闻,小游戏,https://blog.youtube/news-and-events/youtube-updates-november-2025/,,http://43.134.96.131:1200/youtubeblog/news-and-events,youtube官网新闻动态总结
-Music,Music Business World,音乐,https://www.musicbusinessworldwide.com/,日,http://43.134.96.131:1200/musicbusinessworldwide,音乐产业新闻
-Music,Music Ally,音乐,https://musically.com/,日,http://43.134.96.131:1200/musically,音乐产业分析
+Game,jayisgames,小游戏,https://jayisgames.com,其他,http://43.165.175.44:1200/jayisgames,休闲与独立游戏媒体，专注休闲类游戏的评测、推荐与资讯
+AI,facebook开发者官网新闻,小游戏,https://developers.facebook.com/blog/,日,http://43.165.175.44:1200/facebookdevelopers/blog,Meta 公司级别的重大公告、产品更新
+AI,kwai官网新闻,小游戏,https://www.kwai.com/newsroom?referrer=grok.com,,http://43.165.175.44:1200/kwai/newsroom,kwai官网发布品牌活动、合作、内容趋势
+AI,youtube官网新闻,小游戏,https://blog.youtube/news-and-events/youtube-updates-november-2025/,,http://43.165.175.44:1200/youtubeblog/news-and-events,youtube官网新闻动态总结
+Music,Music Business World,音乐,https://www.musicbusinessworldwide.com/,日,http://43.165.175.44:1200/musicbusinessworldwide,音乐产业新闻
+Music,Music Ally,音乐,https://musically.com/,日,http://43.165.175.44:1200/musically,音乐产业分析
 AI,TechCrunch,科技,https://techcrunch.com/,日,https://rsshub.app/techcrunch/news,
-AI,Semrush,科技,https://www.semrush.com/news/releases/product-news/,,http://43.134.96.131:1200/semrush/news/releases/product-news,
+AI,Semrush,科技,https://www.semrush.com/news/releases/product-news/,,http://43.165.175.44:1200/semrush/news/releases/product-news,
 AI,Pinterest,科技,https://newsroom.pinterest.com/news/introducing-new-visual-search-features/,,https://newsroom.pinterest.com/en-gb/feed/news.xml,
-AI,TLDR,科技,https://tldr.tech/,日,http://43.134.96.131:1200/tldr/tech,邮箱订阅
+AI,TLDR,科技,https://tldr.tech/,日,http://43.165.175.44:1200/tldr/tech,邮箱订阅
 AI,Meta Newsroom,/,https://about.fb.com/news/,其他,https://about.fb.com/news/feed/,
 Uncategorized,漫剧自习室,短剧,,日,http://150.158.113.98:4000/feeds/MP_WXS_3562816099.atom,微信公众号
 Uncategorized,短剧自习室,短剧,,日,http://150.158.113.98:4000/feeds/MP_WXS_3906677264.atom,微信公众号
