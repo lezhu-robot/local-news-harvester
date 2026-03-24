@@ -4,8 +4,10 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -18,7 +20,9 @@ import com.example.springboot3newsreader.models.NewsCategory;
 import com.example.springboot3newsreader.models.dto.NewsArticleSearchRequest;
 
 import com.example.springboot3newsreader.repositories.NewsArticleRepository;
+import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -78,6 +82,10 @@ public class NewsArticleService {
   public List<NewsArticle> search(NewsArticleSearchRequest request) {
     Instant startDateTime = parseUtcDateTimeOrNull(request.getStartDateTime(), "startDateTime");
     Instant endDateTime = parseUtcDateTimeOrNull(request.getEndDateTime(), "endDateTime");
+    List<List<String>> preciseKeywordGroups = normalizeKeywordGroups(request.getKeywordGroups());
+    String preciseKeyword = normalizeKeyword(request.getKeyword());
+    List<List<String>> coarseKeywordGroups = buildCoarseKeywordGroups(preciseKeywordGroups, request.getGroupMode());
+    String coarseKeyword = buildCoarseKeyword(preciseKeyword);
 
     Specification<NewsArticle> spec = (root, query, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
@@ -92,12 +100,13 @@ public class NewsArticleService {
         }
       }
 
-      // 2. Keyword (Title or Summary)
-      if (request.getKeyword() != null && !request.getKeyword().isBlank()) {
-        String k = "%" + request.getKeyword().trim().toLowerCase() + "%";
-        Predicate titleMatch = cb.like(cb.lower(root.get("title")), k);
-        Predicate summaryMatch = cb.like(cb.lower(root.get("summary")), k);
-        predicates.add(cb.or(titleMatch, summaryMatch));
+      // 2. Keyword / Keyword Groups (Title or Summary)
+      if (!coarseKeywordGroups.isEmpty()) {
+        predicates.add(buildKeywordGroupsPredicate(root, cb, coarseKeywordGroups, request.getGroupMode()));
+      } else {
+        if (coarseKeyword != null) {
+          predicates.add(buildSingleKeywordPredicate(root, cb, coarseKeyword));
+        }
       }
 
       // 3. Sources
@@ -124,6 +133,7 @@ public class NewsArticleService {
 
     List<NewsArticle> results = newsArticleRepository.findAll(spec, sort).stream()
         .filter(a -> matchesDateTimeRange(a.getPublishedAt(), startDateTime, endDateTime))
+        .filter(a -> matchesKeywordRequestPrecisely(a, preciseKeywordGroups, preciseKeyword, request.getGroupMode()))
         .collect(Collectors.toList());
 
     // Optimize payload: set rawContent to null if not requested
@@ -132,6 +142,199 @@ public class NewsArticleService {
     }
 
     return results;
+  }
+
+  private String normalizeKeyword(String keyword) {
+    if (keyword == null) {
+      return null;
+    }
+    String trimmed = keyword.trim();
+    if (trimmed.isEmpty()) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  private List<List<String>> normalizeKeywordGroups(List<List<String>> keywordGroups) {
+    if (keywordGroups == null || keywordGroups.isEmpty()) {
+      return List.of();
+    }
+
+    List<List<String>> normalizedGroups = new ArrayList<>();
+    for (List<String> keywordGroup : keywordGroups) {
+      if (keywordGroup == null || keywordGroup.isEmpty()) {
+        continue;
+      }
+
+      List<String> normalizedGroup = new ArrayList<>();
+      for (String keyword : keywordGroup) {
+        String normalizedKeyword = normalizeKeyword(keyword);
+        if (normalizedKeyword != null) {
+          normalizedGroup.add(normalizedKeyword);
+        }
+      }
+
+      if (!normalizedGroup.isEmpty()) {
+        normalizedGroups.add(normalizedGroup);
+      }
+    }
+    return normalizedGroups;
+  }
+
+  private String buildCoarseKeyword(String keyword) {
+    if (keyword == null || isRiskyShortAsciiKeyword(keyword)) {
+      return null;
+    }
+    return keyword;
+  }
+
+  private List<List<String>> buildCoarseKeywordGroups(List<List<String>> keywordGroups, String groupMode) {
+    if (keywordGroups.isEmpty()) {
+      return List.of();
+    }
+
+    for (List<String> keywordGroup : keywordGroups) {
+      if (containsRiskyShortAsciiKeyword(keywordGroup)) {
+        if ("OR".equalsIgnoreCase(groupMode)) {
+          return List.of();
+        }
+        return buildAndModeCoarseKeywordGroups(keywordGroups);
+      }
+    }
+    return keywordGroups;
+  }
+
+  private List<List<String>> buildAndModeCoarseKeywordGroups(List<List<String>> keywordGroups) {
+    List<List<String>> coarseGroups = new ArrayList<>();
+    for (List<String> keywordGroup : keywordGroups) {
+      if (!containsRiskyShortAsciiKeyword(keywordGroup)) {
+        coarseGroups.add(keywordGroup);
+      }
+    }
+    return coarseGroups;
+  }
+
+  private boolean containsRiskyShortAsciiKeyword(List<String> keywordGroup) {
+    for (String keyword : keywordGroup) {
+      if (isRiskyShortAsciiKeyword(keyword)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean isRiskyShortAsciiKeyword(String keyword) {
+    return keyword != null && keyword.matches("^[A-Za-z]{1,2}$");
+  }
+
+  private Predicate buildSingleKeywordPredicate(
+      Root<NewsArticle> root,
+      CriteriaBuilder cb,
+      String keywordTerm) {
+    String likePattern = "%" + keywordTerm.toLowerCase() + "%";
+    Predicate titleMatch = cb.like(cb.lower(root.get("title")), likePattern);
+    Predicate summaryMatch = cb.like(cb.lower(root.get("summary")), likePattern);
+    return cb.or(titleMatch, summaryMatch);
+  }
+
+  private Predicate buildKeywordGroupPredicate(
+      Root<NewsArticle> root,
+      CriteriaBuilder cb,
+      List<String> keywordGroup) {
+    List<Predicate> groupPredicates = new ArrayList<>();
+    for (String keywordTerm : keywordGroup) {
+      groupPredicates.add(buildSingleKeywordPredicate(root, cb, keywordTerm));
+    }
+    return cb.or(groupPredicates.toArray(new Predicate[0]));
+  }
+
+  private Predicate buildKeywordGroupsPredicate(
+      Root<NewsArticle> root,
+      CriteriaBuilder cb,
+      List<List<String>> keywordGroups,
+      String groupMode) {
+    List<Predicate> groupPredicates = new ArrayList<>();
+    for (List<String> keywordGroup : keywordGroups) {
+      groupPredicates.add(buildKeywordGroupPredicate(root, cb, keywordGroup));
+    }
+
+    if ("OR".equalsIgnoreCase(groupMode)) {
+      return cb.or(groupPredicates.toArray(new Predicate[0]));
+    }
+    return cb.and(groupPredicates.toArray(new Predicate[0]));
+  }
+
+  private boolean matchesKeywordRequestPrecisely(
+      NewsArticle article,
+      List<List<String>> keywordGroups,
+      String keyword,
+      String groupMode) {
+    if (!keywordGroups.isEmpty()) {
+      return matchesKeywordGroupsPrecisely(buildSearchableText(article), keywordGroups, groupMode);
+    }
+    if (keyword != null) {
+      return matchesKeywordTermPrecisely(buildSearchableText(article), keyword);
+    }
+    return true;
+  }
+
+  private String buildSearchableText(NewsArticle article) {
+    String title = article.getTitle() == null ? "" : article.getTitle();
+    String summary = article.getSummary() == null ? "" : article.getSummary();
+    return title + "\n" + summary;
+  }
+
+  private boolean matchesKeywordGroupsPrecisely(
+      String searchableText,
+      List<List<String>> keywordGroups,
+      String groupMode) {
+    if ("OR".equalsIgnoreCase(groupMode)) {
+      for (List<String> keywordGroup : keywordGroups) {
+        if (matchesKeywordGroupPrecisely(searchableText, keywordGroup)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    for (List<String> keywordGroup : keywordGroups) {
+      if (!matchesKeywordGroupPrecisely(searchableText, keywordGroup)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private boolean matchesKeywordGroupPrecisely(String searchableText, List<String> keywordGroup) {
+    for (String keyword : keywordGroup) {
+      if (matchesKeywordTermPrecisely(searchableText, keyword)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean matchesKeywordTermPrecisely(String searchableText, String keyword) {
+    String loweredText = searchableText.toLowerCase(Locale.ROOT);
+    String loweredKeyword = keyword.toLowerCase(Locale.ROOT);
+    if (containsCjk(keyword)) {
+      return loweredText.contains(loweredKeyword);
+    }
+
+    String pattern = "(?iu)(?<![\\p{L}\\p{N}_])"
+        + Pattern.quote(keyword)
+        + "(?![\\p{L}\\p{N}_])";
+    return Pattern.compile(pattern).matcher(searchableText).find();
+  }
+
+  private boolean containsCjk(String value) {
+    for (int i = 0; i < value.length(); i++) {
+      Character.UnicodeScript script = Character.UnicodeScript.of(value.charAt(i));
+      if (script == Character.UnicodeScript.HAN) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private Instant parseUtcDateTimeOrNull(String rawValue, String fieldName) {

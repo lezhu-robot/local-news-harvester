@@ -68,7 +68,8 @@ public class NewsArticleController {
   @ExceptionHandler(HttpMessageNotReadableException.class)
   public ResponseEntity<?> handleNotReadable(HttpMessageNotReadableException ex) {
     String message = "Invalid request body. Only these fields are supported: "
-        + "category, keyword, sources, tags, startDateTime, endDateTime, sortOrder, includeContent. "
+        + "category, keyword, keywordGroups, groupMode, sources, tags, startDateTime, endDateTime, "
+        + "sortOrder, includeContent. "
         + "Datetime fields must be ISO 8601 UTC with 'Z', e.g. 2026-02-13T02:35:00Z.";
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
         .body(new ApiResponse<>(400, message, null));

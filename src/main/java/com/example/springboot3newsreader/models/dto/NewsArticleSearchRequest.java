@@ -9,6 +9,8 @@ import lombok.Data;
 public class NewsArticleSearchRequest {
     private String category;
     private String keyword;
+    private List<List<String>> keywordGroups;
+    private String groupMode; // AND, OR
     private List<String> sources;
     private List<String> tags;
     private String startDateTime; // ISO 8601 UTC, e.g. 2026-02-13T02:35:00Z

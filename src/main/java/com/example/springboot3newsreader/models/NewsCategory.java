@@ -7,6 +7,7 @@ public enum NewsCategory {
   AI("AI", "AI", 1, true),
   MUSIC("MUSIC", "Music", 2, true),
   GAMES("GAMES", "Games", 3, true),
+  COMPETITORS("COMPETITORS", "Competitors", 4, true),
   UNCATEGORIZED("UNCATEGORIZED", "Uncategorized", 99, true);
 
   private final String key;
