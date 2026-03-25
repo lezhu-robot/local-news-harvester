@@ -16,6 +16,14 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+/**
+ * Client for fetching Twitter/X data via the Scrape Creators API.
+ *
+ * Endpoint: GET /v1/twitter/user-tweets?handle={handle}
+ * Auth: x-api-key header
+ *
+ * Replaces the previous twitter241.p.rapidapi.com RapidAPI client.
+ */
 @Service
 public class TwitterRapidApiClient {
 
@@ -27,36 +35,33 @@ public class TwitterRapidApiClient {
       .build();
   private final ObjectMapper objectMapper = new ObjectMapper();
 
-  @Value("${app.twitter.rapidapi.base-url:https://twitter241.p.rapidapi.com}")
+  @Value("${app.twitter.scrapecreators.base-url:https://api.scrapecreators.com}")
   private String baseUrl;
 
-  @Value("${app.twitter.rapidapi.host:twitter241.p.rapidapi.com}")
-  private String rapidApiHost;
+  @Value("${app.twitter.scrapecreators.api-key:}")
+  private String apiKey;
 
-  @Value("${app.twitter.rapidapi.key:}")
-  private String rapidApiKey;
-
-  public JsonNode fetchUserByUsername(String username) throws Exception {
-    String encodedUsername = URLEncoder.encode(username, StandardCharsets.UTF_8);
-    return executeGet("/user?username=" + encodedUsername);
-  }
-
-  public JsonNode fetchUserTweets(String userId, int count) throws Exception {
-    String encodedUserId = URLEncoder.encode(userId, StandardCharsets.UTF_8);
-    return executeGet("/user-tweets?user=" + encodedUserId + "&count=" + count);
+  /**
+   * Fetch tweets for a Twitter user by handle.
+   * Scrape Creators accepts handle directly — no need to resolve user_id first.
+   */
+  public JsonNode fetchUserTweets(String handle) throws Exception {
+    String encodedHandle = URLEncoder.encode(handle, StandardCharsets.UTF_8);
+    return executeGet("/v1/twitter/user-tweets?handle=" + encodedHandle);
   }
 
   private JsonNode executeGet(String path) throws Exception {
-    if (rapidApiKey == null || rapidApiKey.isBlank()) {
-      throw new IllegalStateException("Twitter RapidAPI key is not configured");
+    if (apiKey == null || apiKey.isBlank()) {
+      throw new IllegalStateException("Twitter Scrape Creators API key is not configured");
     }
 
     String normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
     HttpRequest request = HttpRequest.newBuilder()
         .uri(URI.create(normalizedBaseUrl + path))
         .timeout(Duration.ofSeconds(20))
-        .header("x-rapidapi-key", rapidApiKey)
-        .header("x-rapidapi-host", rapidApiHost)
+        .header("Accept", "application/json")
+        .header("User-Agent", "curl/8.5.0")
+        .header("x-api-key", apiKey)
         .GET()
         .build();
 
@@ -69,10 +74,11 @@ public class TwitterRapidApiClient {
         if (statusCode >= 200 && statusCode < 300) {
           return objectMapper.readTree(response.body());
         }
+        String responseBody = response.body() == null ? "" : response.body();
         if (statusCode == HttpStatus.TOO_MANY_REQUESTS.value() || statusCode >= 500) {
-          lastError = new IOException("RapidAPI request failed with status " + statusCode);
+          lastError = new IOException("Twitter Scrape Creators request failed with status " + statusCode + ": " + responseBody);
         } else {
-          throw new IllegalStateException("RapidAPI request failed with status " + statusCode);
+          throw new IllegalStateException("Twitter Scrape Creators request failed with status " + statusCode + ": " + responseBody);
         }
       } catch (IOException | InterruptedException e) {
         if (e instanceof InterruptedException) {
@@ -88,7 +94,7 @@ public class TwitterRapidApiClient {
     }
 
     throw lastError == null
-        ? new IllegalStateException("RapidAPI request failed")
+        ? new IllegalStateException("Twitter Scrape Creators request failed")
         : lastError;
   }
 }

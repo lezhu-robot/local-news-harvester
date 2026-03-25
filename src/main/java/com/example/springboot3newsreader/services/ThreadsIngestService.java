@@ -6,8 +6,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -19,6 +17,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+/**
+ * Ingest Threads posts via the Scrape Creators API.
+ *
+ * The Scrape Creators API returns a flat {@code posts[]} array (unlike the
+ * previous RapidAPI which nested items inside
+ * {@code data.mediaData.edges[].node.thread_items[].post}).
+ */
 @Service
 public class ThreadsIngestService {
 
@@ -29,7 +34,6 @@ public class ThreadsIngestService {
   private static final int MAX_THUMBNAIL_URL_LENGTH = 255;
 
   private final ObjectMapper objectMapper = new ObjectMapper();
-  private final ConcurrentMap<String, String> userIdCache = new ConcurrentHashMap<>();
 
   @Autowired
   private ThreadsRapidApiClient threadsRapidApiClient;
@@ -48,10 +52,16 @@ public class ThreadsIngestService {
       throw new IllegalArgumentException("Threads feed url must look like https://www.threads.com/@{username}");
     }
 
-    String userId = resolveUserId(username);
     System.out.println("[threads] ingest start: @" + username);
-    JsonNode posts = threadsRapidApiClient.fetchUserPosts(userId);
-    List<NewsArticle> articles = parsePosts(posts, feedItem, username, userId);
+    JsonNode response = threadsRapidApiClient.fetchPostsByUsername(username);
+
+    // Validate API response
+    boolean success = response.path("success").asBoolean(false);
+    if (!success) {
+      throw new IllegalStateException("[threads] Scrape Creators API returned success=false for @" + username);
+    }
+
+    List<NewsArticle> articles = parsePosts(response, feedItem, username);
 
     int before = articles.size();
     articles = newsArticleDedupeService.filterNewArticles(articles);
@@ -83,107 +93,63 @@ public class ThreadsIngestService {
     return username.isBlank() ? null : username;
   }
 
-  private String resolveUserId(String username) throws Exception {
-    String cacheKey = username.toLowerCase(Locale.ROOT);
-    String cached = userIdCache.get(cacheKey);
-    if (cached != null && !cached.isBlank()) {
-      return cached;
-    }
-
-    JsonNode userPayload = threadsRapidApiClient.fetchUserByUsername(username);
-    String resolved = extractUserId(userPayload, username);
-    if (resolved == null || resolved.isBlank()) {
-      throw new IllegalStateException("Unable to resolve Threads user id for @" + username);
-    }
-    userIdCache.put(cacheKey, resolved);
-    return resolved;
-  }
-
-  private String extractUserId(JsonNode root, String username) {
-    JsonNode user = root.path("data").path("user");
-    if (!user.isObject()) {
-      return null;
-    }
-    String resolvedUsername = user.path("username").asText("");
-    if (!resolvedUsername.isBlank() && !resolvedUsername.equalsIgnoreCase(username)) {
-      return null;
-    }
-    String userId = user.path("pk").asText(null);
-    if (userId == null || userId.isBlank()) {
-      userId = user.path("id").asText(null);
-    }
-    return userId;
-  }
-
-  private List<NewsArticle> parsePosts(JsonNode root, FeedItem feedItem, String fallbackUsername, String userId)
+  /**
+   * Parse the flat posts[] array from the Scrape Creators response.
+   */
+  private List<NewsArticle> parsePosts(JsonNode root, FeedItem feedItem, String expectedUsername)
       throws Exception {
     List<NewsArticle> articles = new ArrayList<>();
-    JsonNode edges = root.path("data").path("mediaData").path("edges");
-    if (!edges.isArray()) {
+    JsonNode posts = root.path("posts");
+    if (!posts.isArray()) {
       return articles;
     }
 
-    for (JsonNode edge : edges) {
-      JsonNode threadItems = edge.path("node").path("thread_items");
-      if (!threadItems.isArray()) {
+    for (JsonNode post : posts) {
+      if (!post.isObject()) {
         continue;
       }
-      for (JsonNode threadItem : threadItems) {
-        JsonNode post = threadItem.path("post");
-        if (!post.isObject()) {
-          continue;
-        }
-        if (shouldSkipPost(post, userId)) {
-          continue;
-        }
 
-        String postId = extractPostId(post);
-        String username = extractAuthorUsername(post, fallbackUsername);
-        String text = extractPostText(post);
-        if (postId == null || postId.isBlank() || text == null || text.isBlank()) {
-          continue;
-        }
-
-        NewsArticle article = new NewsArticle();
-        article.setTitle(truncate(text, MAX_TITLE_LENGTH));
-        article.setSummary(truncate(text, MAX_SUMMARY_LENGTH));
-        article.setSourceName(feedItem.getName());
-        article.setSourceURL(truncate(buildSourceUrl(post, username, postId), MAX_SOURCE_URL_LENGTH));
-        article.setPublishedAt(extractPublishedAt(post));
-        article.setScrapedAt(Instant.now().toString());
-        article.setCategory(feedItem.getCategory());
-        article.setTags(serializeTags(extractTags(username)));
-
-        String thumbnailUrl = extractThumbnailUrl(post);
-        if (thumbnailUrl != null && !thumbnailUrl.isBlank()) {
-          article.setTumbnailURL(truncate(thumbnailUrl, MAX_THUMBNAIL_URL_LENGTH));
-        }
-        article.setRawContent(objectMapper.writeValueAsString(post));
-        articles.add(article);
+      // Filter: only keep posts from the expected user
+      String postUsername = post.path("user").path("username").asText("");
+      if (!postUsername.isBlank() && !postUsername.equalsIgnoreCase(expectedUsername)) {
+        continue;
       }
+
+      String postId = extractPostId(post);
+      String text = extractPostText(post);
+      if (postId == null || postId.isBlank() || text == null || text.isBlank()) {
+        continue;
+      }
+
+      String username = postUsername.isBlank() ? expectedUsername : postUsername;
+
+      NewsArticle article = new NewsArticle();
+      article.setTitle(truncate(text, MAX_TITLE_LENGTH));
+      article.setSummary(truncate(text, MAX_SUMMARY_LENGTH));
+      article.setSourceName(feedItem.getName());
+
+      // Use the url field directly if available, otherwise build it
+      String sourceUrl = post.path("url").asText(null);
+      if (sourceUrl == null || sourceUrl.isBlank()) {
+        sourceUrl = buildSourceUrl(post, username, postId);
+      }
+      article.setSourceURL(truncate(sourceUrl, MAX_SOURCE_URL_LENGTH));
+
+      article.setPublishedAt(extractPublishedAt(post));
+      article.setScrapedAt(Instant.now().toString());
+      article.setCategory(feedItem.getCategory());
+      article.setTags(serializeTags(extractTags(username)));
+
+      String thumbnailUrl = extractThumbnailUrl(post);
+      if (thumbnailUrl != null && !thumbnailUrl.isBlank()) {
+        article.setTumbnailURL(truncate(thumbnailUrl, MAX_THUMBNAIL_URL_LENGTH));
+      }
+      article.setRawContent(objectMapper.writeValueAsString(post));
+      articles.add(article);
     }
 
     System.out.println("[threads] parsed articles: " + articles.size());
     return articles;
-  }
-
-  private boolean shouldSkipPost(JsonNode post, String expectedUserId) {
-    JsonNode user = post.path("user");
-    String authorId = user.path("id").asText("");
-    if (!authorId.isBlank() && expectedUserId != null && !expectedUserId.isBlank() && !expectedUserId.equals(authorId)) {
-      return true;
-    }
-
-    JsonNode appInfo = post.path("text_post_app_info");
-    if (appInfo.path("is_reply").asBoolean(false)) {
-      return true;
-    }
-    JsonNode pinnedInfo = appInfo.path("pinned_post_info");
-    if (pinnedInfo.path("is_pinned_to_profile").asBoolean(false)
-        || pinnedInfo.path("is_pinned_to_parent_post").asBoolean(false)) {
-      return true;
-    }
-    return false;
   }
 
   private String extractPostId(JsonNode post) {
@@ -194,33 +160,12 @@ public class ThreadsIngestService {
     return postId;
   }
 
-  private String extractAuthorUsername(JsonNode post, String fallbackUsername) {
-    String username = post.path("user").path("username").asText(null);
-    if (username != null && !username.isBlank()) {
-      return username;
-    }
-    return fallbackUsername;
-  }
-
   private String extractPostText(JsonNode post) {
     String captionText = post.path("caption").path("text").asText(null);
     if (captionText != null && !captionText.isBlank()) {
       return captionText.trim();
     }
-
-    JsonNode fragments = post.path("text_post_app_info").path("text_fragments").path("fragments");
-    if (!fragments.isArray()) {
-      return null;
-    }
-    StringBuilder text = new StringBuilder();
-    for (JsonNode fragment : fragments) {
-      String piece = fragment.path("plaintext").asText(null);
-      if (piece != null && !piece.isBlank()) {
-        text.append(piece);
-      }
-    }
-    String normalized = text.toString().trim();
-    return normalized.isBlank() ? null : normalized;
+    return null;
   }
 
   private String extractPublishedAt(JsonNode post) {
@@ -241,6 +186,10 @@ public class ThreadsIngestService {
   }
 
   private String extractThumbnailUrl(JsonNode post) {
+    // Try user profile pic as fallback thumbnail
+    String profilePic = post.path("user").path("profile_pic_url").asText(null);
+
+    // Try image_versions2 candidates (if present in response)
     JsonNode imageCandidates = post.path("image_versions2").path("candidates");
     if (imageCandidates.isArray() && imageCandidates.size() > 0) {
       String url = imageCandidates.get(0).path("url").asText(null);
@@ -249,20 +198,7 @@ public class ThreadsIngestService {
       }
     }
 
-    JsonNode linkedInlineMedia = post.path("text_post_app_info").path("linked_inline_media");
-    JsonNode linkedCandidates = linkedInlineMedia.path("image_versions2").path("candidates");
-    if (linkedCandidates.isArray() && linkedCandidates.size() > 0) {
-      String url = linkedCandidates.get(0).path("url").asText(null);
-      if (url != null && !url.isBlank()) {
-        return url;
-      }
-    }
-
-    String previewImage = post.path("text_post_app_info").path("link_preview_attachment").path("image_url").asText(null);
-    if (previewImage != null && !previewImage.isBlank()) {
-      return previewImage;
-    }
-
+    // Try carousel_media (if present)
     JsonNode carouselMedia = post.path("carousel_media");
     if (carouselMedia.isArray()) {
       for (JsonNode item : carouselMedia) {
@@ -275,7 +211,9 @@ public class ThreadsIngestService {
         }
       }
     }
-    return null;
+
+    // Fall back to profile pic
+    return profilePic;
   }
 
   private String serializeTags(List<String> tags) throws JsonProcessingException {

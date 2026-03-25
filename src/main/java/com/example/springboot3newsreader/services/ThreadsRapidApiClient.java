@@ -16,6 +16,14 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+/**
+ * Client for fetching Threads posts via the Scrape Creators API.
+ * 
+ * Endpoint: GET /v2/threads/user/posts?username={username}
+ * Auth: x-api-key header
+ * 
+ * Replaces the previous threads-api4.p.rapidapi.com RapidAPI client.
+ */
 @Service
 public class ThreadsRapidApiClient {
 
@@ -27,28 +35,24 @@ public class ThreadsRapidApiClient {
       .build();
   private final ObjectMapper objectMapper = new ObjectMapper();
 
-  @Value("${app.threads.rapidapi.base-url:https://threads-api4.p.rapidapi.com}")
+  @Value("${app.threads.scrapecreators.base-url:https://api.scrapecreators.com}")
   private String baseUrl;
 
-  @Value("${app.threads.rapidapi.host:threads-api4.p.rapidapi.com}")
-  private String rapidApiHost;
+  @Value("${app.threads.scrapecreators.api-key:}")
+  private String apiKey;
 
-  @Value("${app.threads.rapidapi.key:${app.twitter.rapidapi.key:}}")
-  private String rapidApiKey;
-
-  public JsonNode fetchUserByUsername(String username) throws Exception {
+  /**
+   * Fetch posts for a Threads user by username.
+   * Scrape Creators accepts username directly — no need to resolve user_id first.
+   */
+  public JsonNode fetchPostsByUsername(String username) throws Exception {
     String encodedUsername = URLEncoder.encode(username, StandardCharsets.UTF_8);
-    return executeGet("/api/user/info?username=" + encodedUsername);
-  }
-
-  public JsonNode fetchUserPosts(String userId) throws Exception {
-    String encodedUserId = URLEncoder.encode(userId, StandardCharsets.UTF_8);
-    return executeGet("/api/user/posts?user_id=" + encodedUserId);
+    return executeGet("/v1/threads/user/posts?handle=" + encodedUsername);
   }
 
   private JsonNode executeGet(String path) throws Exception {
-    if (rapidApiKey == null || rapidApiKey.isBlank()) {
-      throw new IllegalStateException("Threads RapidAPI key is not configured");
+    if (apiKey == null || apiKey.isBlank()) {
+      throw new IllegalStateException("Threads Scrape Creators API key is not configured");
     }
 
     String normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
@@ -56,10 +60,8 @@ public class ThreadsRapidApiClient {
         .uri(URI.create(normalizedBaseUrl + path))
         .timeout(Duration.ofSeconds(20))
         .header("Accept", "application/json")
-        .header("Content-Type", "application/json")
         .header("User-Agent", "curl/8.5.0")
-        .header("x-rapidapi-key", rapidApiKey)
-        .header("x-rapidapi-host", rapidApiHost)
+        .header("x-api-key", apiKey)
         .GET()
         .build();
 
@@ -74,9 +76,9 @@ public class ThreadsRapidApiClient {
         }
         String responseBody = response.body() == null ? "" : response.body();
         if (statusCode == HttpStatus.TOO_MANY_REQUESTS.value() || statusCode >= 500) {
-          lastError = new IOException("Threads RapidAPI request failed with status " + statusCode + ": " + responseBody);
+          lastError = new IOException("Threads Scrape Creators request failed with status " + statusCode + ": " + responseBody);
         } else {
-          throw new IllegalStateException("Threads RapidAPI request failed with status " + statusCode + ": " + responseBody);
+          throw new IllegalStateException("Threads Scrape Creators request failed with status " + statusCode + ": " + responseBody);
         }
       } catch (IOException | InterruptedException e) {
         if (e instanceof InterruptedException) {
@@ -92,7 +94,7 @@ public class ThreadsRapidApiClient {
     }
 
     throw lastError == null
-        ? new IllegalStateException("Threads RapidAPI request failed")
+        ? new IllegalStateException("Threads Scrape Creators request failed")
         : lastError;
   }
 }

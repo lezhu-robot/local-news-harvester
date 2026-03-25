@@ -10,8 +10,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -39,7 +37,6 @@ public class TwitterIngestService {
       .toFormatter(Locale.ENGLISH);
 
   private final ObjectMapper objectMapper = new ObjectMapper();
-  private final ConcurrentMap<String, String> userIdCache = new ConcurrentHashMap<>();
 
   @Autowired
   private TwitterRapidApiClient twitterRapidApiClient;
@@ -58,10 +55,9 @@ public class TwitterIngestService {
       throw new IllegalArgumentException("Twitter feed url must look like https://x.com/{username}");
     }
 
-    String userId = resolveUserId(username);
     System.out.println("[twitter] ingest start: @" + username);
-    JsonNode timeline = twitterRapidApiClient.fetchUserTweets(userId, DEFAULT_TWEET_FETCH_COUNT);
-    List<NewsArticle> articles = parseTimeline(timeline, feedItem, username);
+    JsonNode response = twitterRapidApiClient.fetchUserTweets(username);
+    List<NewsArticle> articles = parseTimeline(response, feedItem, username);
 
     int before = articles.size();
     articles = newsArticleDedupeService.filterNewArticles(articles);
@@ -93,100 +89,82 @@ public class TwitterIngestService {
     return username.isBlank() ? null : username;
   }
 
-  private String resolveUserId(String username) throws Exception {
-    String cacheKey = username.toLowerCase(Locale.ROOT);
-    String cached = userIdCache.get(cacheKey);
-    if (cached != null && !cached.isBlank()) {
-      return cached;
-    }
 
-    JsonNode userPayload = twitterRapidApiClient.fetchUserByUsername(username);
-    String resolved = extractUserId(userPayload, username);
-    if (resolved == null || resolved.isBlank()) {
-      throw new IllegalStateException("Unable to resolve Twitter user id for @" + username);
-    }
-    userIdCache.put(cacheKey, resolved);
-    return resolved;
-  }
 
-  private String extractUserId(JsonNode root, String username) {
-    if (root == null || root.isMissingNode()) {
-      return null;
-    }
-    if (root.isObject()) {
-      String screenName = root.path("legacy").path("screen_name").asText(null);
-      if (screenName == null || screenName.isBlank()) {
-        screenName = root.path("core").path("screen_name").asText(null);
-      }
-      if (screenName != null && screenName.equalsIgnoreCase(username) && root.hasNonNull("rest_id")) {
-        return root.path("rest_id").asText();
-      }
-      for (var fields = root.fields(); fields.hasNext();) {
-        var field = fields.next();
-        String userId = extractUserId(field.getValue(), username);
-        if (userId != null) {
-          return userId;
-        }
-      }
-      return null;
-    }
-    if (root.isArray()) {
-      for (JsonNode child : root) {
-        String userId = extractUserId(child, username);
-        if (userId != null) {
-          return userId;
-        }
-      }
-    }
-    return null;
-  }
-
-  private List<NewsArticle> parseTimeline(JsonNode timelineRoot, FeedItem feedItem, String fallbackUsername)
+  /**
+   * Parse the flat tweets[] array from the Scrape Creators response.
+   * The internal tweet structure (rest_id, legacy, core) is identical to twitter241.
+   */
+  private List<NewsArticle> parseTimeline(JsonNode root, FeedItem feedItem, String fallbackUsername)
       throws JsonProcessingException {
     List<NewsArticle> articles = new ArrayList<>();
-    List<JsonNode> candidates = new ArrayList<>();
-    collectTweetCandidates(timelineRoot, candidates);
+
+    // Scrape Creators returns { tweets: [...] }
+    JsonNode tweetsArray = root.path("tweets");
+    if (!tweetsArray.isArray()) {
+      // Fallback: try the old nested traversal if tweets[] not present
+      List<JsonNode> candidates = new ArrayList<>();
+      collectTweetCandidates(root, candidates);
+      for (JsonNode candidate : candidates) {
+        JsonNode tweet = unwrapTweetResult(candidate);
+        if (tweet != null) {
+          addTweetArticle(tweet, feedItem, fallbackUsername, articles, new HashSet<>());
+        }
+      }
+      System.out.println("[twitter] parsed articles (fallback): " + articles.size());
+      return articles;
+    }
 
     Set<String> seenTweetIds = new HashSet<>();
-    for (JsonNode candidate : candidates) {
-      JsonNode tweet = unwrapTweetResult(candidate);
-      if (tweet == null || tweet.isMissingNode() || tweet.isNull()) {
-        continue;
-      }
-
-      String tweetId = tweet.path("rest_id").asText(null);
-      if (tweetId == null || tweetId.isBlank() || !seenTweetIds.add(tweetId)) {
-        continue;
-      }
-      if (shouldSkipTweet(tweet)) {
-        continue;
-      }
-
-      String username = extractAuthorUsername(tweet, fallbackUsername);
-      String text = extractTweetText(tweet);
-      if (text == null || text.isBlank()) {
-        continue;
-      }
-
-      NewsArticle article = new NewsArticle();
-      article.setTitle(truncate(text, MAX_TITLE_LENGTH));
-      article.setSummary(truncate(text, MAX_SUMMARY_LENGTH));
-      article.setSourceName(feedItem.getName());
-      article.setSourceURL(truncate("https://x.com/" + username + "/status/" + tweetId, MAX_SOURCE_URL_LENGTH));
-      article.setPublishedAt(extractPublishedAt(tweet));
-      article.setScrapedAt(Instant.now().toString());
-      article.setCategory(feedItem.getCategory());
-      article.setTags(serializeTags(extractTags(tweet)));
-
-      String thumbnailUrl = extractThumbnailUrl(tweet);
-      if (thumbnailUrl != null && !thumbnailUrl.isBlank()) {
-        article.setTumbnailURL(truncate(thumbnailUrl, MAX_THUMBNAIL_URL_LENGTH));
-      }
-      article.setRawContent(objectMapper.writeValueAsString(tweet));
-      articles.add(article);
+    for (JsonNode tweet : tweetsArray) {
+      addTweetArticle(tweet, feedItem, fallbackUsername, articles, seenTweetIds);
     }
     System.out.println("[twitter] parsed articles: " + articles.size());
     return articles;
+  }
+
+  private void addTweetArticle(JsonNode tweet, FeedItem feedItem, String fallbackUsername,
+      List<NewsArticle> articles, Set<String> seenTweetIds) throws JsonProcessingException {
+    if (tweet == null || tweet.isMissingNode() || tweet.isNull()) {
+      return;
+    }
+
+    String tweetId = tweet.path("rest_id").asText(null);
+    if (tweetId == null || tweetId.isBlank() || !seenTweetIds.add(tweetId)) {
+      return;
+    }
+    if (shouldSkipTweet(tweet)) {
+      return;
+    }
+
+    String username = extractAuthorUsername(tweet, fallbackUsername);
+    String text = extractTweetText(tweet);
+    if (text == null || text.isBlank()) {
+      return;
+    }
+
+    // Use the url field from Scrape Creators if available
+    String sourceUrl = tweet.path("url").asText(null);
+    if (sourceUrl == null || sourceUrl.isBlank()) {
+      sourceUrl = "https://x.com/" + username + "/status/" + tweetId;
+    }
+
+    NewsArticle article = new NewsArticle();
+    article.setTitle(truncate(text, MAX_TITLE_LENGTH));
+    article.setSummary(truncate(text, MAX_SUMMARY_LENGTH));
+    article.setSourceName(feedItem.getName());
+    article.setSourceURL(truncate(sourceUrl, MAX_SOURCE_URL_LENGTH));
+    article.setPublishedAt(extractPublishedAt(tweet));
+    article.setScrapedAt(Instant.now().toString());
+    article.setCategory(feedItem.getCategory());
+    article.setTags(serializeTags(extractTags(tweet)));
+
+    String thumbnailUrl = extractThumbnailUrl(tweet);
+    if (thumbnailUrl != null && !thumbnailUrl.isBlank()) {
+      article.setTumbnailURL(truncate(thumbnailUrl, MAX_THUMBNAIL_URL_LENGTH));
+    }
+    article.setRawContent(objectMapper.writeValueAsString(tweet));
+    articles.add(article);
   }
 
   private void collectTweetCandidates(JsonNode node, List<JsonNode> results) {
