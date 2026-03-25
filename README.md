@@ -4,7 +4,7 @@
 本项目是一个本地新闻聚合与阅读器，后端负责抓取/整理新闻源，前端提供移动端 UI 展示与浏览。
 
 ## 功能概览
-- 新闻源管理：添加 RSS / Web / Twitter 类型的源并触发抓取
+- 新闻源管理：添加 RSS / Web / Twitter / Threads 类型的源并触发抓取
 - 内容聚合：按分类查看、刷新新闻列表
 - 图片代理：为来源站点图片提供统一代理接口
 - 前端展示：Flutter 应用展示来源列表与文章详情
@@ -40,11 +40,16 @@ Flutter 默认会请求 `http://localhost:8080` 的 API（见 `flutter_news_appl
 - Feature Flags (默认为 RSS-Only 模式):
   - `app.feature.web-ingest.enabled=false`: 禁用 Web 页面抓取
   - `app.feature.twitter-ingest.enabled=false`: 禁用 Twitter/X 抓取
+- `app.feature.threads-ingest.enabled=false`: 禁用 Threads 抓取
   - `app.feature.thumbnail-task.enabled=false`: 禁用后台补图任务
 - Twitter RapidAPI 配置：
   - `app.twitter.rapidapi.base-url=https://twitter241.p.rapidapi.com`
   - `app.twitter.rapidapi.host=twitter241.p.rapidapi.com`
   - `app.twitter.rapidapi.key=`: 必填，建议通过环境变量注入
+- Threads RapidAPI 配置：
+  - `app.threads.rapidapi.base-url=https://threads-api4.p.rapidapi.com`
+  - `app.threads.rapidapi.host=threads-api4.p.rapidapi.com`
+  - `app.threads.rapidapi.key=`: 可单独配置；留空时默认回退到 `APP_TWITTER_RAPIDAPI_KEY`
 
 如果不使用 Docker，请自行准备 MariaDB，并确保以下连接信息一致：
 - DB 名称：`news_reader`
@@ -59,14 +64,14 @@ Flutter 默认会请求 `http://localhost:8080` 的 API（见 `flutter_news_appl
 | GET | `/api/categories/{category}/newsarticles` | 按分类获取文章 |
 | GET | `/api/newsarticles` | 获取全部文章 |
 | GET | `/api/newsarticles/{id}` | 获取单条文章 |
-| GET | `/api/newsarticles/refresh` | 从 RSS / Web / Twitter 刷新文章 |
+| GET | `/api/newsarticles/refresh` | 从 RSS / Web / Twitter / Threads 刷新文章 |
 | POST | `/api/newsarticles/seed` | 插入示例文章 |
 | DELETE | `/api/newsarticles/seed` | 删除示例文章 |
 | GET | `/api/feeditems` | 获取全部新闻源 |
 | GET | `/api/feeditems/{id}` | 获取单条新闻源 |
 | POST | `/api/feeditems/seed` | 插入示例新闻源 |
 | DELETE | `/api/feeditems/seed` | 删除示例新闻源 |
-| POST | `/feeds/new` | 新建新闻源（表单提交，支持 RSS / Web / Twitter） |
+| POST | `/feeds/new` | 新建新闻源（表单提交，支持 RSS / Web / Twitter / Threads） |
 | POST | `/feeds/preview` | 预览 Web 类型新闻源 |
 | POST | `/admin/clear` | 清空业务表 |
 | POST | `/admin/seed-rss` | 批量导入内置 RSS 源 |
@@ -140,7 +145,7 @@ curl -X POST http://150.158.113.98:9090/api/newsarticles/search \
 ```
 
 #### 刷新更多新闻
-使用以下命令手动触发已启用 RSS / Web / Twitter 源的刷新：
+使用以下命令手动触发已启用 RSS / Web / Twitter / Threads 源的刷新：
 
 **方式 A：使用 IP (HTTP)**
 ```bash
@@ -157,6 +162,14 @@ curl https://5a9892d3.r8.cpolar.cn/api/newsarticles/refresh
 - `sourceType` 使用 `TWITTER`
 - `url` 必须类似 `https://x.com/realDonaldTrump`
 - 仅抓取原创 tweet，不保留 reply / retweet / quote / pinned tweet
+
+#### 添加 Threads 源
+创建 Threads 源时：
+- `sourceType` 使用 `THREADS`
+- `url` 必须类似 `https://www.threads.com/@mattnavarra`
+- 仅抓取主帖，不保留 reply / pinned post
+- 先用 `username` 解析 `user_id`，再通过 RapidAPI 拉取帖子
+- 当前已提供批量注册脚本：`scripts/add_threads_sources.py`
 
 ### 5. (可选) 配置公网 HTTPS 访问 (Cpolar)
 如果需要通过公网 HTTPS 访问，可以使用 cpolar 进行内网穿透。
