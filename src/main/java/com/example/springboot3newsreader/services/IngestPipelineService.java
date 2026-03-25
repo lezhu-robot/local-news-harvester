@@ -22,11 +22,15 @@ public class IngestPipelineService {
   private WebIngestService webIngestService;
   @Autowired
   private TwitterIngestService twitterIngestService;
+  @Autowired
+  private ThreadsIngestService threadsIngestService;
 
   @Value("${app.feature.web-ingest.enabled:true}")
   private boolean webIngestEnabled;
   @Value("${app.feature.twitter-ingest.enabled:false}")
   private boolean twitterIngestEnabled;
+  @Value("${app.feature.threads-ingest.enabled:false}")
+  private boolean threadsIngestEnabled;
 
   public List<NewsArticle> ingestFeed(FeedItem feed) throws Exception {
     if (feed == null || feed.getSourceType() == null) {
@@ -54,6 +58,13 @@ public class IngestPipelineService {
         return new ArrayList<>();
       }
       return twitterIngestService.ingest(feed);
+    }
+    if ("THREADS".equals(type)) {
+      if (!threadsIngestEnabled) {
+        System.out.println("Skipping THREADS feed ingestion (disabled by config): " + feed.getName());
+        return new ArrayList<>();
+      }
+      return threadsIngestService.ingest(feed);
     }
     return new ArrayList<>();
   }

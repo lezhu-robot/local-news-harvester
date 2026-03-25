@@ -40,6 +40,8 @@ public class FormController {
   private boolean webIngestEnabled;
   @Value("${app.feature.twitter-ingest.enabled:false}")
   private boolean twitterIngestEnabled;
+  @Value("${app.feature.threads-ingest.enabled:false}")
+  private boolean threadsIngestEnabled;
 
   @PostMapping("/feeds/new")
   public ResponseEntity<?> createFeedItem(FeedItem feedItem) {
@@ -70,10 +72,11 @@ public class FormController {
     }
     if (!feedItem.getSourceType().equals("RSS")
         && !feedItem.getSourceType().equals("WEB")
-        && !feedItem.getSourceType().equals("TWITTER")) {
-      System.out.println("[feeds/new] validation failed: sourceType must be RSS, WEB or TWITTER");
+        && !feedItem.getSourceType().equals("TWITTER")
+        && !feedItem.getSourceType().equals("THREADS")) {
+      System.out.println("[feeds/new] validation failed: sourceType must be RSS, WEB, TWITTER or THREADS");
       return ResponseEntity.badRequest()
-          .body(new ApiResponse<>(400, "sourceType must be RSS, WEB or TWITTER!", null));
+          .body(new ApiResponse<>(400, "sourceType must be RSS, WEB, TWITTER or THREADS!", null));
     }
     if ("WEB".equals(feedItem.getSourceType()) && !webIngestEnabled) {
       System.out.println("[feeds/new] validation failed: WEB source disabled by feature flag");
@@ -84,6 +87,11 @@ public class FormController {
       System.out.println("[feeds/new] validation failed: TWITTER source disabled by feature flag");
       return ResponseEntity.badRequest()
           .body(new ApiResponse<>(400, "TWITTER source type is currently disabled by configuration!", null));
+    }
+    if ("THREADS".equals(feedItem.getSourceType()) && !threadsIngestEnabled) {
+      System.out.println("[feeds/new] validation failed: THREADS source disabled by feature flag");
+      return ResponseEntity.badRequest()
+          .body(new ApiResponse<>(400, "THREADS source type is currently disabled by configuration!", null));
     }
     if (feedItem.getEnabled() == null) {
       System.out.println("[feeds/new] validation failed: enabled is null");
@@ -102,6 +110,12 @@ public class FormController {
       System.out.println("[feeds/new] validation failed: twitter url is invalid");
       return ResponseEntity.badRequest()
           .body(new ApiResponse<>(400, "twitter url should look like https://x.com/{username}!", null));
+    }
+    if ("THREADS".equals(feedItem.getSourceType())
+        && !isValidThreadsProfileUrl(url)) {
+      System.out.println("[feeds/new] validation failed: threads url is invalid");
+      return ResponseEntity.badRequest()
+          .body(new ApiResponse<>(400, "threads url should look like https://www.threads.com/@{username}!", null));
     }
     System.out.println("[feeds/new] normalized name=" + name + ", url=" + url);
     if (feedItemRepository.existsByNameAndUrl(name, url)) {
@@ -162,6 +176,11 @@ public class FormController {
   private boolean isValidTwitterProfileUrl(String url) {
     String normalized = url == null ? "" : url.trim().toLowerCase();
     return normalized.matches("^https?://(www\\.)?(x|twitter)\\.com/[^/?#]+/?$");
+  }
+
+  private boolean isValidThreadsProfileUrl(String url) {
+    String normalized = url == null ? "" : url.trim().toLowerCase();
+    return normalized.matches("^https?://(www\\.)?threads\\.(com|net)/@[^/?#]+/?$");
   }
 
   @PostMapping("/admin/clear")

@@ -54,3 +54,5 @@ pnpm-debug.log*
 __pycache__/
 *.pyc
 *.sql.gz
+scripts/.cache/
+scripts/output/

@@ -58,7 +58,7 @@ public class NewsArticleService {
   }
 
   public List<NewsArticle> refreshFromRssFeeds() {
-    // 1) 取所有已启用的 RSS/WEB/TWITTER 源
+    // 1) 取所有已启用的 RSS/WEB/TWITTER/THREADS 源
     List<FeedItem> allFeeds = feedItemRepository.findAll();
     List<FeedItem> feeds = new ArrayList<>();
     for (FeedItem feed : allFeeds) {
@@ -67,7 +67,8 @@ public class NewsArticleService {
       }
       if ("RSS".equals(feed.getSourceType())
           || "WEB".equals(feed.getSourceType())
-          || "TWITTER".equals(feed.getSourceType())) {
+          || "TWITTER".equals(feed.getSourceType())
+          || "THREADS".equals(feed.getSourceType())) {
         feeds.add(feed);
       }
     }
