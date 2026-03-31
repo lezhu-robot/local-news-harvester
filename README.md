@@ -125,7 +125,7 @@ curl http://localhost:9090/api/newsarticles/refresh
 # 1. 先启动数据库
 docker compose up -d database
 
-# 2. 启动后端
+# 2. 启动后端（会自动读取仓库根目录 .env）
 SPRING_DOCKER_COMPOSE_ENABLED=false ./mvnw -DskipTests spring-boot:run
 
 # 3. (可选) 启动 Flutter 前端
@@ -149,7 +149,7 @@ cd flutter_news_application && flutter pub get && flutter run
 
 | 配置项 | 默认 | 说明 |
 |--------|------|------|
-| `app.feature.twitter-ingest.enabled` | `true` | Twitter/X 抓取 |
+| `app.feature.twitter-ingest.enabled` | `false` | Twitter/X 抓取（已禁用） |
 | `app.feature.threads-ingest.enabled` | `true` | Threads 抓取 |
 | `app.feature.web-ingest.enabled` | `false` | Web 页面抓取（需站点适配器） |
 | `app.feature.thumbnail-task.enabled` | `false` | 异步 OG 图片补全 |

@@ -19,7 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 /**
  * Client for fetching Threads posts via the Scrape Creators API.
  * 
- * Endpoint: GET /v2/threads/user/posts?username={username}
+ * Endpoint: GET /v1/threads/user/posts?handle={username}
  * Auth: x-api-key header
  * 
  * Replaces the previous threads-api4.p.rapidapi.com RapidAPI client.

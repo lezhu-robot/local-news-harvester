@@ -73,14 +73,19 @@ public class IngestPipelineService {
     if (feeds == null || feeds.isEmpty()) {
       return new ArrayList<>();
     }
-    // 使用并行流加速抓取 (多线程并发执行)
-    // 注意：ArrayList 非线程安全，使用 Collections.synchronizedList 或 collect
     return feeds.parallelStream()
         .flatMap(feed -> {
           try {
             return ingestFeed(feed).stream();
           } catch (Exception e) {
-            // ignore failure
+            String feedName = feed == null ? "<null>" : String.valueOf(feed.getName());
+            String feedType = feed == null ? "<null>" : String.valueOf(feed.getSourceType());
+            String feedUrl = feed == null ? "<null>" : String.valueOf(feed.getUrl());
+            System.err.println("[ingest] feed failed: type=" + feedType
+                + ", name=" + feedName
+                + ", url=" + feedUrl
+                + ", error=" + e.getMessage());
+            e.printStackTrace();
             return java.util.stream.Stream.empty();
           }
         })
